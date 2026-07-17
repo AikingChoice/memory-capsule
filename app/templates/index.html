@@ -1,0 +1,658 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>记忆胶囊 — AI 语音记忆助手</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --primary: #6C63FF;
+            --primary-dark: #5A52D5;
+            --bg: #F7F7FB;
+            --card: #FFFFFF;
+            --text: #2D2D3A;
+            --text-secondary: #6B7280;
+            --border: #E5E7EB;
+            --positive: #10B981;
+            --neutral: #6B7280;
+            --negative: #EF4444;
+            --radius: 12px;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, var(--primary), #A78BFA);
+            color: white;
+            padding: 24px 0;
+            text-align: center;
+        }
+        .header h1 { font-size: 28px; font-weight: 700; }
+        .header p { font-size: 14px; opacity: 0.85; margin-top: 6px; }
+        .container { max-width: 800px; margin: 0 auto; padding: 24px 16px; }
+
+        /* Tab 切换 */
+        .tabs {
+            display: flex;
+            background: var(--card);
+            border-radius: var(--radius);
+            overflow: hidden;
+            margin-bottom: 24px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 14px;
+            text-align: center;
+            font-size: 15px;
+            font-weight: 600;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 卡片 */
+        .card {
+            background: var(--card);
+            border-radius: var(--radius);
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        }
+        .card h3 {
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: var(--text);
+        }
+
+        /* 录音区域 */
+        .record-area {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        .btn-primary:hover { background: var(--primary-dark); }
+        .btn-danger {
+            background: var(--negative);
+            color: white;
+        }
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--border);
+            color: var(--text);
+        }
+        .btn-outline:hover { border-color: var(--primary); color: var(--primary); }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
+
+        /* 录音动画 */
+        .recording-indicator {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            color: var(--negative);
+            font-size: 14px;
+        }
+        .recording-indicator.active { display: flex; }
+        .rec-dot {
+            width: 10px; height: 10px;
+            background: var(--negative);
+            border-radius: 50%;
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+
+        /* 上传区域 */
+        .upload-area {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: center;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-top: 16px;
+        }
+        .upload-area:hover { border-color: var(--primary); color: var(--primary); }
+        .upload-area input { display: none; }
+
+        /* 状态提示 */
+        .status-msg {
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 12px;
+            display: none;
+        }
+        .status-msg.info { display: block; background: #EFF6FF; color: #1D4ED8; }
+        .status-msg.success { display: block; background: #F0FDF4; color: #15803D; }
+        .status-msg.error { display: block; background: #FEF2F2; color: #B91C1C; }
+
+        /* 记忆列表 */
+        .memory-list { list-style: none; }
+        .memory-item {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.15s;
+        }
+        .memory-item:last-child { border-bottom: none; }
+        .memory-item:hover { background: #F9FAFB; }
+        .memory-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+        }
+        .badge-positive { background: var(--positive); }
+        .badge-neutral { background: var(--neutral); }
+        .badge-negative { background: var(--negative); }
+        .memory-summary { font-size: 14px; line-height: 1.6; }
+        .memory-keywords {
+            margin-top: 8px;
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .keyword-tag {
+            padding: 2px 10px;
+            background: #F3F4F6;
+            border-radius: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .memory-actions {
+            margin-top: 8px;
+            display: flex;
+            gap: 8px;
+        }
+
+        /* 分页 */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        /* 对话区域 */
+        .chat-messages {
+            min-height: 300px;
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 16px;
+            background: #F9FAFB;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .message {
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+        .message.user { align-items: flex-end; }
+        .message.assistant { align-items: flex-start; }
+        .message-bubble {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .message.user .message-bubble {
+            background: var(--primary);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+        .message.assistant .message-bubble {
+            background: white;
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+        }
+        .message-sources {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .chat-input-area {
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .chat-input:focus { border-color: var(--primary); }
+
+        /* 统计卡片 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        .stat-card {
+            text-align: center;
+            padding: 16px;
+            background: #F9FAFB;
+            border-radius: 8px;
+        }
+        .stat-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+        .stat-label { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+        /* 空状态 */
+        .empty-state {
+            text-align: center;
+            padding: 48px 16px;
+            color: var(--text-secondary);
+        }
+        .empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+
+        /* 加载动画 */
+        .loading { display: inline-block; width: 16px; height: 16px; }
+        .loading::after {
+            content: "";
+            display: block;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            border: 2px solid var(--primary);
+            border-color: var(--primary) transparent;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* 响应式 */
+        @media (max-width: 600px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .record-area { flex-direction: column; align-items: stretch; }
+            .chat-input-area { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h1>💊 记忆胶囊</h1>
+    <p>AI 语音记忆助手 — 录下声音，留住回忆</p>
+</div>
+
+<div class="container">
+    <!-- Tab 切换 -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="memories">📦 记忆管理</button>
+        <button class="tab-btn" data-tab="chat">💬 对话回忆</button>
+    </div>
+
+    <!-- 记忆管理 Tab -->
+    <div id="tab-memories" class="tab-content active">
+        <!-- 录音卡片 -->
+        <div class="card">
+            <h3>🎙️ 录下一段记忆</h3>
+            <div class="record-area">
+                <button id="btn-record" class="btn btn-primary" onclick="toggleRecording()">开始录音</button>
+                <div id="rec-indicator" class="recording-indicator">
+                    <span class="rec-dot"></span>
+                    <span id="rec-time">00:00</span>
+                </div>
+                <audio id="audio-playback" controls style="display:none; max-width: 300px;"></audio>
+                <button id="btn-upload-rec" class="btn btn-outline" style="display:none" onclick="uploadRecording()">上传录音</button>
+            </div>
+            <div class="upload-area" onclick="document.getElementById('file-input').click()">
+                <input type="file" id="file-input" accept=".mp3,.wav,.m4a,.webm,.ogg,.flac" onchange="uploadFile(this)">
+                📁 点击或拖拽上传音频文件
+            </div>
+            <div id="upload-status" class="status-msg"></div>
+        </div>
+
+        <!-- 统计 -->
+        <div class="card">
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-total">-</div>
+                    <div class="stat-label">总记忆</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-positive" style="color:var(--positive)">-</div>
+                    <div class="stat-label">😊 开心</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-neutral" style="color:var(--neutral)">-</div>
+                    <div class="stat-label">😐 平静</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="stat-negative" style="color:var(--negative)">-</div>
+                    <div class="stat-label">😔 难过</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 记忆列表 -->
+        <div class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                <h3>📋 我的记忆</h3>
+                <select id="sentiment-filter" onchange="loadMemories(1)" style="padding:6px 12px; border-radius:6px; border:1px solid var(--border); font-size:13px">
+                    <option value="">全部情绪</option>
+                    <option value="positive">😊 开心</option>
+                    <option value="neutral">😐 平静</option>
+                    <option value="negative">😔 难过</option>
+                </select>
+            </div>
+            <ul id="memory-list" class="memory-list"></ul>
+            <div id="pagination" class="pagination"></div>
+        </div>
+    </div>
+
+    <!-- 对话回忆 Tab -->
+    <div id="tab-chat" class="tab-content">
+        <div class="card">
+            <h3>🧠 和记忆对话</h3>
+            <div id="chat-messages" class="chat-messages">
+                <div class="message assistant">
+                    <div class="message-bubble">你好！我是你的记忆助手。你可以问我关于过去录音的问题，比如"我上次聊了什么开心的事？"</div>
+                </div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" class="chat-input" id="chat-input" placeholder="问我关于你记忆的问题..." onkeydown="if(event.key==='Enter')sendChat()">
+                <button class="btn btn-primary" onclick="sendChat()">发送</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// === 配置 ===
+const API = '';
+
+// === Tab 切换 ===
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+    });
+});
+
+// === 录音 ===
+let mediaRecorder = null;
+let audioChunks = [];
+let recordedBlob = null;
+let recTimer = null;
+let recSeconds = 0;
+
+async function toggleRecording() {
+    const btn = document.getElementById('btn-record');
+    const indicator = document.getElementById('rec-indicator');
+    const playback = document.getElementById('audio-playback');
+    const uploadBtn = document.getElementById('btn-upload-rec');
+
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        btn.textContent = '开始录音';
+        btn.classList.remove('btn-danger');
+        btn.classList.add('btn-primary');
+        indicator.classList.remove('active');
+        clearInterval(recTimer);
+        return;
+    }
+
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = () => {
+            recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+            playback.src = URL.createObjectURL(recordedBlob);
+            playback.style.display = 'block';
+            uploadBtn.style.display = 'inline-block';
+            stream.getTracks().forEach(t => t.stop());
+        };
+
+        mediaRecorder.start();
+        btn.textContent = '停止录音';
+        btn.classList.remove('btn-primary');
+        btn.classList.add('btn-danger');
+        indicator.classList.add('active');
+        playback.style.display = 'none';
+        uploadBtn.style.display = 'none';
+
+        recSeconds = 0;
+        document.getElementById('rec-time').textContent = '00:00';
+        recTimer = setInterval(() => {
+            recSeconds++;
+            const m = String(Math.floor(recSeconds / 60)).padStart(2, '0');
+            const s = String(recSeconds % 60).padStart(2, '0');
+            document.getElementById('rec-time').textContent = m + ':' + s;
+        }, 1000);
+    } catch (err) {
+        showStatus('无法访问麦克风: ' + err.message, 'error');
+    }
+}
+
+function uploadRecording() {
+    if (!recordedBlob) return;
+    const file = new File([recordedBlob], 'recording.webm', { type: 'audio/webm' });
+    doUpload(file);
+}
+
+function uploadFile(input) {
+    if (!input.files.length) return;
+    doUpload(input.files[0]);
+    input.value = '';
+}
+
+async function doUpload(file) {
+    const status = document.getElementById('upload-status');
+    status.className = 'status-msg info';
+    status.textContent = '⏳ 上传中...';
+    status.style.display = 'block';
+
+    const form = new FormData();
+    form.append('file', file);
+
+    try {
+        const res = await fetch(API + '/api/upload', { method: 'POST', body: form });
+        const data = await res.json();
+        if (res.ok) {
+            status.className = 'status-msg success';
+            status.textContent = '✅ 上传成功！记忆 #' + data.id + ' 正在处理...';
+            // 3秒后刷新列表
+            setTimeout(() => { loadMemories(1); loadStats(); }, 3000);
+        } else {
+            status.className = 'status-msg error';
+            status.textContent = '❌ ' + (data.detail || '上传失败');
+        }
+    } catch (err) {
+        status.className = 'status-msg error';
+        status.textContent = '❌ 网络错误: ' + err.message;
+    }
+}
+
+function showStatus(msg, type) {
+    const el = document.getElementById('upload-status');
+    el.className = 'status-msg ' + type;
+    el.textContent = msg;
+    el.style.display = 'block';
+}
+
+// === 记忆列表 ===
+let currentPage = 1;
+
+async function loadMemories(page) {
+    currentPage = page;
+    const sentiment = document.getElementById('sentiment-filter').value;
+    let url = API + '/api/memories?page=' + page + '&size=10';
+    if (sentiment) url += '&sentiment=' + sentiment;
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const list = document.getElementById('memory-list');
+
+        if (!data.items.length) {
+            list.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>还没有记忆，录一段语音试试吧！</p></div>';
+            document.getElementById('pagination').innerHTML = '';
+            return;
+        }
+
+        list.innerHTML = data.items.map(m => {
+            const badgeClass = 'badge-' + m.sentiment;
+            const sentimentLabel = { positive: '😊 开心', neutral: '😐 平静', negative: '😔 难过' }[m.sentiment] || m.sentiment;
+            const keywords = m.keywords ? m.keywords.split(',').map(k => '<span class="keyword-tag">' + k.trim() + '</span>').join('') : '';
+            const date = m.created_at ? new Date(m.created_at).toLocaleString('zh-CN') : '';
+            const duration = m.duration_seconds ? Math.round(m.duration_seconds) + '秒' : '';
+
+            return '<li class="memory-item">' +
+                '<div class="memory-meta">' +
+                    '<span class="badge ' + badgeClass + '">' + sentimentLabel + '</span>' +
+                    '<span>' + date + '</span>' +
+                    (duration ? '<span>· ' + duration + '</span>' : '') +
+                '</div>' +
+                '<div class="memory-summary">' + (m.summary || m.transcript?.substring(0, 100) || '(处理中)') + '</div>' +
+                (keywords ? '<div class="memory-keywords">' + keywords + '</div>' : '') +
+                '<div class="memory-actions">' +
+                    '<button class="btn btn-outline btn-sm" onclick="deleteMemory(' + m.id + ')">删除</button>' +
+                '</div>' +
+            '</li>';
+        }).join('');
+
+        // 分页
+        const totalPages = Math.ceil(data.total / data.size);
+        let pagHtml = '';
+        if (totalPages > 1) {
+            for (let i = 1; i <= totalPages; i++) {
+                pagHtml += '<button class="btn btn-sm ' + (i === page ? 'btn-primary' : 'btn-outline') + '" onclick="loadMemories(' + i + ')">' + i + '</button>';
+            }
+        }
+        document.getElementById('pagination').innerHTML = pagHtml;
+    } catch (err) {
+        document.getElementById('memory-list').innerHTML = '<div class="empty-state"><p>加载失败: ' + err.message + '</p></div>';
+    }
+}
+
+async function deleteMemory(id) {
+    if (!confirm('确定要删除这条记忆吗？')) return;
+    try {
+        await fetch(API + '/api/memories/' + id, { method: 'DELETE' });
+        loadMemories(currentPage);
+        loadStats();
+    } catch (err) {
+        alert('删除失败: ' + err.message);
+    }
+}
+
+// === 统计 ===
+async function loadStats() {
+    try {
+        const res = await fetch(API + '/api/memories/stats/overview');
+        const data = await res.json();
+        document.getElementById('stat-total').textContent = data.total;
+        document.getElementById('stat-positive').textContent = data.sentiment.positive;
+        document.getElementById('stat-neutral').textContent = data.sentiment.neutral;
+        document.getElementById('stat-negative').textContent = data.sentiment.negative;
+    } catch (err) {
+        console.error('统计加载失败', err);
+    }
+}
+
+// === 对话 ===
+async function sendChat() {
+    const input = document.getElementById('chat-input');
+    const question = input.value.trim();
+    if (!question) return;
+    input.value = '';
+
+    const container = document.getElementById('chat-messages');
+    container.innerHTML += '<div class="message user"><div class="message-bubble">' + escapeHtml(question) + '</div></div>';
+
+    // 加载提示
+    container.innerHTML += '<div class="message assistant" id="loading-msg"><div class="message-bubble"><span class="loading"></span> 正在回忆中...</div></div>';
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        const res = await fetch(API + '/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: question }),
+        });
+        const data = await res.json();
+
+        document.getElementById('loading-msg')?.remove();
+
+        let sourcesHtml = '';
+        if (data.sources && data.sources.length) {
+            sourcesHtml = '<div class="message-sources">📎 相关记忆: ' +
+                data.sources.map(s => '#' + s.memory_id).join(', ') + '</div>';
+        }
+
+        container.innerHTML += '<div class="message assistant"><div class="message-bubble">' +
+            escapeHtml(data.answer) + '</div>' + sourcesHtml + '</div>';
+    } catch (err) {
+        document.getElementById('loading-msg')?.remove();
+        container.innerHTML += '<div class="message assistant"><div class="message-bubble">❌ 请求失败: ' + escapeHtml(err.message) + '</div></div>';
+    }
+
+    container.scrollTop = container.scrollHeight;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// === 初始化 ===
+loadMemories(1);
+loadStats();
+</script>
+
+</body>
+</html>
