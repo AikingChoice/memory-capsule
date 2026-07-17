@@ -5,13 +5,15 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    # DeepSeek
-    deepseek_api_key: str = ""
-    deepseek_base_url: str = "https://api.deepseek.com"
+    # 主模型（任意 OpenAI 兼容接口）
+    primary_api_key: str = ""
+    primary_base_url: str = "https://api.deepseek.com"
+    primary_model: str = "deepseek-chat"
 
-    # MiMo (备用)
-    mimo_api_key: str = ""
-    mimo_base_url: str = "https://api.xiaomi.com/v1"
+    # 备用模型（主模型挂了自动切换）
+    backup_api_key: str = ""
+    backup_base_url: str = ""
+    backup_model: str = ""
 
     # 应用
     app_host: str = "0.0.0.0"

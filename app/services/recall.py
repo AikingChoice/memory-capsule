@@ -81,11 +81,11 @@ def recall(question: str) -> dict:
 
     try:
         client = OpenAI(
-            api_key=settings.deepseek_api_key,
-            base_url=settings.deepseek_base_url,
+            api_key=settings.primary_api_key,
+            base_url=settings.primary_base_url,
         )
         response = client.chat.completions.create(
-            model="deepseek-chat",
+            model=settings.primary_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=500,

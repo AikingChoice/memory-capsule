@@ -1,11 +1,12 @@
 ﻿# -*- coding: utf-8 -*-
 """
-AI 分析服务 — 用 DeepSeek/MiMo 对转写文本做摘要、关键词提取、情绪分析。
+AI 分析服务 — 对转写文本做摘要、关键词提取、情绪分析。
 
 设计思路：
 - 一次 API 调用完成三个任务（摘要+关键词+情绪），省 token
 - 用 JSON mode 让模型输出结构化数据，避免正则解析出错
-- 备用模型自动切换：DeepSeek 挂了切 MiMo
+- 主备模型自动切换，两个都挂了才报错
+- 用的是 OpenAI 兼容接口，换模型只改 .env，代码不用动
 """
 import json
 import logging
@@ -16,16 +17,23 @@ logger = logging.getLogger(__name__)
 
 
 def _get_client(use_backup: bool = False) -> OpenAI:
-    """获取 LLM 客户端，use_backup=True 时切到 MiMo"""
-    if use_backup and settings.mimo_api_key:
+    """获取 LLM 客户端"""
+    if use_backup and settings.backup_api_key:
         return OpenAI(
-            api_key=settings.mimo_api_key,
-            base_url=settings.mimo_base_url,
+            api_key=settings.backup_api_key,
+            base_url=settings.backup_base_url,
         )
     return OpenAI(
-        api_key=settings.deepseek_api_key,
-        base_url=settings.deepseek_base_url,
+        api_key=settings.primary_api_key,
+        base_url=settings.primary_base_url,
     )
+
+
+def _get_model_name(use_backup: bool = False) -> str:
+    """获取模型名称"""
+    if use_backup:
+        return settings.backup_model
+    return settings.primary_model
 
 
 ANALYSIS_PROMPT = """你是一个记忆分析助手。请分析以下语音转写文本，返回 JSON 格式的结果。
@@ -59,7 +67,7 @@ def analyze(text: str) -> dict:
         }
 
     Raises:
-        RuntimeError: 两个模型都调用失败
+        RuntimeError: 主备模型都调用失败
     """
     if not text.strip():
         return {
@@ -77,15 +85,21 @@ def analyze(text: str) -> dict:
 
     prompt = ANALYSIS_PROMPT.format(text=text)
 
-    # 先试 DeepSeek，失败切 MiMo
+    # 先试主模型，失败切备用
     for use_backup in [False, True]:
-        model_name = "MiMo" if use_backup else "DeepSeek"
+        # 没配备用模型就跳过
+        if use_backup and not settings.backup_api_key:
+            break
+
+        model_name = _get_model_name(use_backup)
+        label = "备用模型" if use_backup else "主模型"
+
         try:
             client = _get_client(use_backup=use_backup)
-            logger.info("调用 %s 分析文本 (%d 字符)", model_name, len(text))
+            logger.info("调用%s %s 分析文本 (%d 字符)", label, model_name, len(text))
 
             response = client.chat.completions.create(
-                model="deepseek-chat" if not use_backup else "MiMo-v2.5-Pro",
+                model=model_name,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=0.3,  # 低温度，输出更稳定
                 max_tokens=300,
@@ -111,9 +125,9 @@ def analyze(text: str) -> dict:
             return result
 
         except Exception as e:
-            logger.warning("%s 分析失败: %s", model_name, str(e))
+            logger.warning("%s %s 分析失败: %s", label, model_name, str(e))
             if use_backup:  # 两个都失败了
-                raise RuntimeError(f"AI 分析失败（DeepSeek 和 MiMo 均不可用）: {str(e)}")
+                raise RuntimeError(f"AI 分析失败（主备模型均不可用）: {str(e)}")
 
-    # 不会走到这里，但保险起见
+    # 只配了主模型且失败了
     raise RuntimeError("AI 分析失败")

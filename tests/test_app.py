@@ -19,7 +19,7 @@ def setup_db(tmp_path, monkeypatch):
     """每个测试用例使用独立的临时数据库"""
     db_url = f"sqlite:///{tmp_path}/test.db"
     monkeypatch.setenv("DATABASE_URL", db_url)
-    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("PRIMARY_API_KEY", "test-key")
     monkeypatch.setenv("CHROMA_PATH", str(tmp_path / "chroma"))
 
     # 重新加载配置和数据库
